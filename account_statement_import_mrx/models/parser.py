@@ -83,28 +83,24 @@ class MRXParser(models.AbstractModel):
     def get_base_line(self):
         return {"payment_ref": "/", "amount": 0}
 
-    def parse_statement(self, ns, node):
+    def parse_statement(self, ns, payment):
         """Parse a single Stmt node."""
         result = {}
         transactions = []
         paymentMoreInfos = {}
 
         self.add_value_from_node(
-            ns, node, ["./passStlAcctNo"], paymentMoreInfos, "account_number",
+            ns, payment, ["../passStlAcctNo"], paymentMoreInfos, "stlAcctNo",
         )
         self.add_value_from_node(
-            ns, node, ["./iban"], paymentMoreInfos, "iban",
+            ns, payment, ["../iban"], paymentMoreInfos, "iban",
         )
 
         self.add_value_from_node(
-            ns, node, ["./stlCurCode"], result, "currency"
-        )
+            ns, payment, ["../stlCurCode"], result, "currency"
+	        )
 
-        payment = node.xpath("./payment")[0]
 
-        self.add_value_from_node(
-            ns, payment, ["./paymentNo"], result, "name"
-        )
 
         maybe_opening_balance = payment.xpath("./openingBalance")
         if maybe_opening_balance:
@@ -116,20 +112,26 @@ class MRXParser(models.AbstractModel):
         # prepare the payment line (maybe 0 for non payment)
         trx = self.get_base_line()
         if maybe_closing_balance:
-            result["balance_end_real"], self.parse_float(ns, maybe_closing_balance[0], "./aClBalSC")
+            result["balance_end_real"] = self.parse_float(ns, maybe_closing_balance[0], "./aClBalSC")
 
-            self.add_value_from_node(ns, payment, ["./clBalReason"], paymentMoreInfos, "clBalReason")
-            self.add_value_from_node(ns, payment, ["./clBalDate"], paymentMoreInfos, "clBalDate")
-            result["clBalReasonText"] = ENDING_BALANCE_REASON.get(result["clBalReason"], _("Unknow Ending Balance Reason Code"))
+            self.add_value_from_node(ns, maybe_closing_balance[0], ["./clBalReason"], paymentMoreInfos, "clBalReason")
+            self.add_value_from_node(ns, maybe_closing_balance[0], ["./clBalDate"], paymentMoreInfos, "clBalDate")
+            paymentMoreInfos["clBalReasonText"] = ENDING_BALANCE_REASON.get(paymentMoreInfos["clBalReason"], _("Unknow Ending Balance Reason Code"))
 
             trx["ref"] = _("Non Payment from Wordline (SIX)")
             trx["date"] = paymentMoreInfos["clBalDate"]
             trx["amount"] = 0.0
             trx["transaction_type"] = "NONPAYMENT"
 
+            result["name"] =  "%s%s" % (trx["date"].strip('-'), "NONPAYMENT")
+
         else:
 
             result["balance_end_real"] = 0.0  # this payment
+
+            self.add_value_from_node(
+                ns, payment, ["./paymentNo"], result, "name"
+            )
 
             for tag in ["paymentType", "paymentDate", "paymentNo", "valueDate"]:
                 self.add_value_from_node(ns, payment, ["./{}".format(tag)], paymentMoreInfos, tag)
@@ -246,7 +248,7 @@ class MRXParser(models.AbstractModel):
         result["date"] = None
         if transactions:
             result["date"] = sorted(
-                transactions, key=lambda x: x["date"], reverse=True
+                transactions, key=lambda x: x["date"] or "1990-01-01", reverse=True
             )[0]["date"]
         return result
 
@@ -265,14 +267,14 @@ class MRXParser(models.AbstractModel):
             raise ValueError("Not a valid xml file, or not an xml file at all.")
 
         ns = ""
-        stlAccounts = root.xpath("./reportingPart/settlingPart/stlAccount")
+        stlAccounts = root.xpath("./reportingPart/settlingPart/stlAccount/payment")
 
         if not stlAccounts:
             raise ValueError("Not a valid mrx xml file.")
 
         statements = []
         currency = None
-        account_number = None
+        account_number = self.parse_text(ns, root, "./reportingPart/settlingPart/passStlPartId")
 
         for stlAccount in stlAccounts:
                 statement = self.parse_statement(ns, stlAccount)
@@ -280,6 +282,6 @@ class MRXParser(models.AbstractModel):
                     if "currency" in statement:
                         currency = statement.pop("currency")
                     if "account_number" in statement:
-                        account_number = statement.pop("account_number")
+                        statement.pop("account_number")
                     statements.append(statement)
         return currency, account_number, statements
