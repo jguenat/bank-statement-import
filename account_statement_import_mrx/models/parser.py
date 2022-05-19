@@ -1,8 +1,7 @@
 # Copyright 2022 AGEPoly
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html).
-import re
-
 from lxml import etree
+from datetime import datetime
 
 from odoo import _, models
 
@@ -212,23 +211,28 @@ class MRXParser(models.AbstractModel):
     
                         amount_comm = self.parse_float(ns, trx, "./aComEffSC")
     
-                        complete_date = "{}-{}".format(self.parse_text(ns, trx, "./trxDate"), self.parse_text(ns, trx, "./trxTime"))
+                        date = self.parse_text(ns, trx, "./trxDate")
+                        time = self.parse_text(ns, trx, "./trxTime")
+                        complete_date = "{}-{}".format(date, time)
+                        complete_date_parsed = datetime.strptime(complete_date, '%Y-%m-%d-%H:%M:%S.%f')
     
+                        trxMoreInfos["netAmount"] = self.parse_float(ns, trx, "./aNetSC")
                         trxMoreInfos["grossAmount"] = amount
                         trxMoreInfos["commAmount"] = amount_comm
-                        trxMoreInfos["netAmount"] = self.parse_float(ns, trx, "./aNetSC")
+                        trxMoreInfos["date"] = complete_date
     
                         grossTrx = self.get_base_line()
                         grossTrx["ref"] = self.parse_text(ns, trx, "./addlStmntText") or _("Transaction")
                         grossTrx["payment_ref"] = self.parse_text(ns, trx, "./passTrxId")
                         grossTrx["unique_import_id"] =  "trx{}".format(grossTrx["payment_ref"])
                         grossTrx["amount"] = amount
-                        grossTrx["transaction_type"] = trxMoreInfos["trxType"]
+                        grossTrx["transaction_type"] = "TRX-{}".format(trxMoreInfos["trxType"])
                         if foreign_currency != result["currency"]:
                             grossTrx["amount_currency"] = amount_currency
                             grossTrx["foreign_currency_id"] = parsed_foreign_currency
-                        grossTrx["date"] = complete_date
-                        grossTrx["narration"] = str(trxMoreInfos) 
+                        grossTrx["date"] = date
+                        grossTrx["complete_date"] = complete_date_parsed
+                        grossTrx["narration"] = str(trxMoreInfos)
     
                         trxMoreInfos["isComm"] = True
     
@@ -238,9 +242,9 @@ class MRXParser(models.AbstractModel):
                         commTrx["unique_import_id"] =  "comm{}".format(commTrx["payment_ref"])
                         commTrx["amount"] = amount_comm
                         commTrx["transaction_type"] = "COMM-{}".format(trxMoreInfos["trxType"])
-                        commTrx["date"] = complete_date
+                        commTrx["date"] = date
+                        commTrx["complete_date"] = complete_date_parsed
                         commTrx["narration"] = str(trxMoreInfos)
-    
                         transactions.append(grossTrx)
                         transactions.append(commTrx)
 
