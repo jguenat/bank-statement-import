@@ -222,7 +222,7 @@ class MRXParser(models.AbstractModel):
                         trxMoreInfos["date"] = complete_date
     
                         grossTrx = self.get_base_line()
-                        grossTrx["ref"] = self.parse_text(ns, trx, "./addlStmntText") or _("Transaction")
+                        grossTrx["ref"] = trxMoreInfos["addlStmntText"] or trxMoreInfos["addlMercData"] or _("Transaction")
                         grossTrx["payment_ref"] = self.parse_text(ns, trx, "./passTrxId")
                         grossTrx["unique_import_id"] =  "trx{}".format(grossTrx["payment_ref"])
                         grossTrx["amount"] = amount
