@@ -1,20 +1,24 @@
 # Copyright 2022 AGEPoly
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html).
-from lxml import etree
 from datetime import datetime
+
+from lxml import etree
 
 from odoo import _, models
 
 ENDING_BALANCE_REASON = {
-  '10' : "Negative balance of technical merchant account.",
-  '20' : "Balance of technical merchant account is below minimum amount for settlement.",
-  '30' : "Merchant settlement has been blocked by acquirer.",
-  '40' : "Insufficient data for merchant settlement"
+    "10": "Negative balance of technical merchant account.",
+    "20": "Balance of technical merchant account is below minimum amount for settlement.",
+    "30": "Merchant settlement has been blocked by acquirer.",
+    "40": "Insufficient data for merchant settlement",
 }
+
 
 class MRXParser(models.AbstractModel):
     _name = "account.statement.import.mrx.parser"
-    _description = "Account Bank Statement Import merchantReconciliationXML (MRX) parser"
+    _description = (
+        "Account Bank Statement Import merchantReconciliationXML (MRX) parser"
+    )
 
     def parse_int(self, ns, node, search_str):
         found_node = node.xpath(search_str)
@@ -64,19 +68,26 @@ class MRXParser(models.AbstractModel):
                 return
         obj[attr_name] = None
 
-
     def trxFromfAdj(self, ns, node, moreInfos={}):
         narration = moreInfos.copy()
-        for tag in ["stlEntryType", "stlEntrySubType", "fAdjText", "passStlEntryNo", "fAdjDate"]:
-            self.add_value_from_node(ns, node, ["./{}".format(tag)], narration, tag)
+        for tag in [
+            "stlEntryType",
+            "stlEntrySubType",
+            "fAdjText",
+            "passStlEntryNo",
+            "fAdjDate",
+        ]:
+            self.add_value_from_node(ns, node, [f"./{tag}"], narration, tag)
         trx = self.get_base_line()
-        trx["narration"] = str(narration)        
+        trx["narration"] = str(narration)
         trx["ref"] = narration["fAdjText"]
         trx["payment_ref"] = narration["passStlEntryNo"]
-        trx["unique_import_id"] =  "adj{}".format(trx["payment_ref"])
+        trx["unique_import_id"] = "adj{}".format(trx["payment_ref"])
         trx["amount"] = self.parse_float(ns, node, "aFAdjNetSC")
         trx["date"] = narration["fAdjDate"]
-        trx["transaction_type"] = "ADJ - {} - {}".format(narration["stlEntryType"], narration["stlEntrySubType"])
+        trx["transaction_type"] = "ADJ - {} - {}".format(
+            narration["stlEntryType"], narration["stlEntrySubType"]
+        )
         return trx
 
     def get_base_line(self):
@@ -89,21 +100,27 @@ class MRXParser(models.AbstractModel):
         paymentMoreInfos = {}
 
         self.add_value_from_node(
-            ns, payment, ["../passStlAcctNo"], paymentMoreInfos, "stlAcctNo",
+            ns,
+            payment,
+            ["../passStlAcctNo"],
+            paymentMoreInfos,
+            "stlAcctNo",
         )
         self.add_value_from_node(
-            ns, payment, ["../iban"], paymentMoreInfos, "iban",
+            ns,
+            payment,
+            ["../iban"],
+            paymentMoreInfos,
+            "iban",
         )
 
-        self.add_value_from_node(
-            ns, payment, ["../stlCurCode"], result, "currency"
-	        )
-
-
+        self.add_value_from_node(ns, payment, ["../stlCurCode"], result, "currency")
 
         maybe_opening_balance = payment.xpath("./openingBalance")
         if maybe_opening_balance:
-            result["balance_start"] = self.parse_float(ns, maybe_opening_balance[0], "./aOpBalSC")
+            result["balance_start"] = self.parse_float(
+                ns, maybe_opening_balance[0], "./aOpBalSC"
+            )
         else:
             result["balance_start"] = 0.0  # last payment was done correctly
 
@@ -111,33 +128,48 @@ class MRXParser(models.AbstractModel):
         # prepare the payment line (maybe 0 for non payment)
         trx = self.get_base_line()
         if maybe_closing_balance:
-            result["balance_end_real"] = self.parse_float(ns, maybe_closing_balance[0], "./aClBalSC")
+            result["balance_end_real"] = self.parse_float(
+                ns, maybe_closing_balance[0], "./aClBalSC"
+            )
 
-            self.add_value_from_node(ns, maybe_closing_balance[0], ["./clBalReason"], paymentMoreInfos, "clBalReason")
-            self.add_value_from_node(ns, maybe_closing_balance[0], ["./clBalDate"], paymentMoreInfos, "clBalDate")
-            paymentMoreInfos["clBalReasonText"] = ENDING_BALANCE_REASON.get(paymentMoreInfos["clBalReason"], _("Unknow Ending Balance Reason Code"))
+            self.add_value_from_node(
+                ns,
+                maybe_closing_balance[0],
+                ["./clBalReason"],
+                paymentMoreInfos,
+                "clBalReason",
+            )
+            self.add_value_from_node(
+                ns,
+                maybe_closing_balance[0],
+                ["./clBalDate"],
+                paymentMoreInfos,
+                "clBalDate",
+            )
+            paymentMoreInfos["clBalReasonText"] = ENDING_BALANCE_REASON.get(
+                paymentMoreInfos["clBalReason"], _("Unknow Ending Balance Reason Code")
+            )
 
             trx["ref"] = _("Non Payment from Wordline (SIX)")
             trx["date"] = paymentMoreInfos["clBalDate"]
             trx["amount"] = 0.0
             trx["transaction_type"] = "NONPAYMENT"
 
-            result["name"] =  "%s%s" % (trx["date"].strip('-'), "NONPAYMENT")
+            result["name"] = "%s%s" % (trx["date"].strip("-"), "NONPAYMENT")
 
         else:
-
             result["balance_end_real"] = 0.0  # this payment
 
-            self.add_value_from_node(
-                ns, payment, ["./paymentNo"], result, "name"
-            )
+            self.add_value_from_node(ns, payment, ["./paymentNo"], result, "name")
 
             for tag in ["paymentType", "paymentDate", "paymentNo", "valueDate"]:
-                self.add_value_from_node(ns, payment, ["./{}".format(tag)], paymentMoreInfos, tag)
+                self.add_value_from_node(
+                    ns, payment, [f"./{tag}"], paymentMoreInfos, tag
+                )
 
             trx["ref"] = _("Payment from Wordline (SIX)")
             trx["payment_ref"] = paymentMoreInfos["paymentNo"]
-            trx["unique_import_id"] =  "pay{}".format(trx["payment_ref"])
+            trx["unique_import_id"] = "pay{}".format(trx["payment_ref"])
             trx["date"] = paymentMoreInfos["valueDate"]
             trx["amount"] = -1 * self.parse_float(ns, payment, "./sum/sumSC/aPaymentSC")
             trx["account_number"] = paymentMoreInfos["iban"]
@@ -148,23 +180,29 @@ class MRXParser(models.AbstractModel):
 
         for businessPart in payment:
             if businessPart.tag == "fAdj":
-                    #adj_type = parse_int(ns, contract, "./stlEntryType")
-                    #if adj_type == 46:
-                    #    trx = self.get_base_line("Accumulated Rounding Difference")
-                        #rounding_diff  = # LINE_CREATE
-                    #else:
-                transactions.append(self.trxFromfAdj(ns, businessPart, paymentMoreInfos))
+                # adj_type = parse_int(ns, contract, "./stlEntryType")
+                # if adj_type == 46:
+                #    trx = self.get_base_line("Accumulated Rounding Difference")
+                # rounding_diff  = # LINE_CREATE
+                # else:
+                transactions.append(
+                    self.trxFromfAdj(ns, businessPart, paymentMoreInfos)
+                )
                 continue
             elif businessPart.tag != "businessPart":
                 continue
 
             bpMoreInfos = paymentMoreInfos.copy()
-            bpMoreInfos["passBusPartId"] = self.parse_text(ns, businessPart, './passBusPartId')
+            bpMoreInfos["passBusPartId"] = self.parse_text(
+                ns, businessPart, "./passBusPartId"
+            )
 
             for contract in businessPart:
                 coMoreInfos = bpMoreInfos.copy()
-                coMoreInfos["extVPNo"] = self.parse_text(ns, contract, './extVPNo')
-                coMoreInfos["contractCategory"] = self.parse_text(ns, contract, './contractCategory')
+                coMoreInfos["extVPNo"] = self.parse_text(ns, contract, "./extVPNo")
+                coMoreInfos["contractCategory"] = self.parse_text(
+                    ns, contract, "./contractCategory"
+                )
 
                 if contract.tag != "contract":
                     continue
@@ -177,71 +215,121 @@ class MRXParser(models.AbstractModel):
                         continue
 
                     enMoreInfos = coMoreInfos.copy()
-                    enMoreInfos["passStlEntryNo"] = self.parse_text(ns, entry, './sumSlip/passStlEntryNo')
-                    enMoreInfos["origin"] = self.parse_text(ns, entry, './sumSlip/origin')
-                    enMoreInfos["sumSlipId"] = self.parse_text(ns, entry, './sumSlip/sumSlipId')
-                    enMoreInfos["trmId"] = self.parse_text(ns, entry, './sumSlip/trmId')
-                    enMoreInfos["trmPer"] = self.parse_text(ns, entry, './sumSlip/trmPer')
-
+                    enMoreInfos["passStlEntryNo"] = self.parse_text(
+                        ns, entry, "./sumSlip/passStlEntryNo"
+                    )
+                    enMoreInfos["origin"] = self.parse_text(
+                        ns, entry, "./sumSlip/origin"
+                    )
+                    enMoreInfos["sumSlipId"] = self.parse_text(
+                        ns, entry, "./sumSlip/sumSlipId"
+                    )
+                    enMoreInfos["trmId"] = self.parse_text(ns, entry, "./sumSlip/trmId")
+                    enMoreInfos["trmPer"] = self.parse_text(
+                        ns, entry, "./sumSlip/trmPer"
+                    )
 
                     for trx in entry.xpath("./sumSlip/trx"):
                         trxMoreInfos = enMoreInfos.copy()
-                        trxMoreInfos["trxType"] = self.parse_text(ns, trx, './trxType')
-                        trxMoreInfos["trxTypeId"] = self.parse_text(ns, trx, './trxTypeId')
-                        trxMoreInfos["trxIndicator"] = self.parse_text(ns, trx, './trxIndicator')
-                        trxMoreInfos["pan"] = self.parse_text(ns, trx, './pan')
-                        trxMoreInfos["authNo"] = self.parse_text(ns, trx, './authNo')
-                        trxMoreInfos["refNo"] = self.parse_text(ns, trx, './refNo')
-                        trxMoreInfos["trmTrxNo"] = self.parse_text(ns, trx, './trmTrxNo')
-                        trxMoreInfos["addlMercData"] = self.parse_text(ns, trx, './addlMercData')
-                        trxMoreInfos["addlStmntText"] = self.parse_text(ns, trx, './addlStmntText')
-                        trxMoreInfos["arn"] = self.parse_text(ns, trx, './arn')
-                        trxMoreInfos["dccInd"] = self.parse_text(ns, trx, './dccInd')
-                        trxMoreInfos["isReversal"] = self.parse_text(ns, trx, './isReversal')
-                        trxMoreInfos["entryType"] = self.parse_text(ns, trx, './entryType')
-                        trxMoreInfos["accountIndex"] = self.parse_text(ns, trx, './accountIndex')
-                        trxMoreInfos["cardProduct"] = self.parse_text(ns, trx, './cardProduct')
-                        trxMoreInfos["unBlendCat"] = self.parse_text(ns, trx, './unBlendCat')
-    
+                        trxMoreInfos["trxType"] = self.parse_text(ns, trx, "./trxType")
+                        trxMoreInfos["trxTypeId"] = self.parse_text(
+                            ns, trx, "./trxTypeId"
+                        )
+                        trxMoreInfos["trxIndicator"] = self.parse_text(
+                            ns, trx, "./trxIndicator"
+                        )
+                        trxMoreInfos["pan"] = self.parse_text(ns, trx, "./pan")
+                        trxMoreInfos["authNo"] = self.parse_text(ns, trx, "./authNo")
+                        trxMoreInfos["refNo"] = self.parse_text(ns, trx, "./refNo")
+                        trxMoreInfos["trmTrxNo"] = self.parse_text(
+                            ns, trx, "./trmTrxNo"
+                        )
+                        trxMoreInfos["addlMercData"] = self.parse_text(
+                            ns, trx, "./addlMercData"
+                        )
+                        trxMoreInfos["addlStmntText"] = self.parse_text(
+                            ns, trx, "./addlStmntText"
+                        )
+                        trxMoreInfos["arn"] = self.parse_text(ns, trx, "./arn")
+                        trxMoreInfos["dccInd"] = self.parse_text(ns, trx, "./dccInd")
+                        trxMoreInfos["isReversal"] = self.parse_text(
+                            ns, trx, "./isReversal"
+                        )
+                        trxMoreInfos["entryType"] = self.parse_text(
+                            ns, trx, "./entryType"
+                        )
+                        trxMoreInfos["accountIndex"] = self.parse_text(
+                            ns, trx, "./accountIndex"
+                        )
+                        trxMoreInfos["cardProduct"] = self.parse_text(
+                            ns, trx, "./cardProduct"
+                        )
+                        trxMoreInfos["unBlendCat"] = self.parse_text(
+                            ns, trx, "./unBlendCat"
+                        )
+
                         amount = self.parse_float(ns, trx, "./aTrxGrosSC")
                         amount_currency = self.parse_float(ns, trx, "./aTrxOC")
                         foreign_currency = self.parse_text(ns, trx, "./aTrxOC/@c")
-    
-                        parsed_foreign_currency = (self.env['res.currency'].search([['name', 'ilike', foreign_currency]]).mapped('id') or [None])[0]
-    
+
+                        parsed_foreign_currency = (
+                            self.env["res.currency"]
+                            .search([["name", "ilike", foreign_currency]])
+                            .mapped("id")
+                            or [None]
+                        )[0]
+
                         amount_comm = self.parse_float(ns, trx, "./aComEffSC")
-    
+
                         date = self.parse_text(ns, trx, "./trxDate")
                         time = self.parse_text(ns, trx, "./trxTime")
-                        complete_date = "{}-{}".format(date, time)
-                        complete_date_parsed = datetime.strptime(complete_date, '%Y-%m-%d-%H:%M:%S.%f')
-    
-                        trxMoreInfos["netAmount"] = self.parse_float(ns, trx, "./aNetSC")
+                        complete_date = f"{date}-{time}"
+                        complete_date_parsed = datetime.strptime(
+                            complete_date, "%Y-%m-%d-%H:%M:%S.%f"
+                        )
+
+                        trxMoreInfos["netAmount"] = self.parse_float(
+                            ns, trx, "./aNetSC"
+                        )
                         trxMoreInfos["grossAmount"] = amount
                         trxMoreInfos["commAmount"] = amount_comm
                         trxMoreInfos["date"] = complete_date
-    
+
                         grossTrx = self.get_base_line()
-                        grossTrx["ref"] = trxMoreInfos["addlStmntText"] or trxMoreInfos["addlMercData"] or _("Transaction")
-                        grossTrx["payment_ref"] = self.parse_text(ns, trx, "./passTrxId")
-                        grossTrx["unique_import_id"] =  "trx{}".format(grossTrx["payment_ref"])
+                        grossTrx["ref"] = (
+                            trxMoreInfos["addlStmntText"]
+                            or trxMoreInfos["addlMercData"]
+                            or _("Transaction")
+                        )
+                        grossTrx["payment_ref"] = self.parse_text(
+                            ns, trx, "./passTrxId"
+                        )
+                        grossTrx["unique_import_id"] = "trx{}".format(
+                            grossTrx["payment_ref"]
+                        )
                         grossTrx["amount"] = amount
-                        grossTrx["transaction_type"] = "TRX-{}".format(trxMoreInfos["trxType"])
+                        grossTrx["transaction_type"] = "TRX-{}".format(
+                            trxMoreInfos["trxType"]
+                        )
                         if foreign_currency != result["currency"]:
                             grossTrx["amount_currency"] = amount_currency
                             grossTrx["foreign_currency_id"] = parsed_foreign_currency
                         grossTrx["date"] = date
                         grossTrx["complete_date"] = complete_date_parsed
                         grossTrx["narration"] = str(trxMoreInfos)
-    
+
                         trxMoreInfos["isComm"] = True
-    
+
                         commTrx = self.get_base_line()
                         commTrx["ref"] = _("Commission on transaction")
                         commTrx["payment_ref"] = self.parse_text(ns, trx, "./passTrxId")
-                        commTrx["unique_import_id"] =  "comm{}".format(commTrx["payment_ref"])
+                        commTrx["unique_import_id"] = "comm{}".format(
+                            commTrx["payment_ref"]
+                        )
                         commTrx["amount"] = amount_comm
-                        commTrx["transaction_type"] = "COMM-{}".format(trxMoreInfos["trxType"])
+                        commTrx["transaction_type"] = "COMM-{}".format(
+                            trxMoreInfos["trxType"]
+                        )
                         commTrx["date"] = date
                         commTrx["complete_date"] = complete_date_parsed
                         commTrx["narration"] = str(trxMoreInfos)
@@ -278,14 +366,16 @@ class MRXParser(models.AbstractModel):
 
         statements = []
         currency = None
-        account_number = self.parse_text(ns, root, "./reportingPart/settlingPart/passStlPartId")
+        account_number = self.parse_text(
+            ns, root, "./reportingPart/settlingPart/passStlPartId"
+        )
 
         for stlAccount in stlAccounts:
-                statement = self.parse_statement(ns, stlAccount)
-                if len(statement["transactions"]):
-                    if "currency" in statement:
-                        currency = statement.pop("currency")
-                    if "account_number" in statement:
-                        statement.pop("account_number")
-                    statements.append(statement)
+            statement = self.parse_statement(ns, stlAccount)
+            if len(statement["transactions"]):
+                if "currency" in statement:
+                    currency = statement.pop("currency")
+                if "account_number" in statement:
+                    statement.pop("account_number")
+                statements.append(statement)
         return currency, account_number, statements

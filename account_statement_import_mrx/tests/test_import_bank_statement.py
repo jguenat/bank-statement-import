@@ -1,10 +1,8 @@
 # Copyright 2022 AGEPoly
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html).
-import base64
 import difflib
 import pprint
 import tempfile
-from datetime import date
 
 from odoo.modules.module import get_module_resource
 from odoo.tests.common import TransactionCase
@@ -14,7 +12,7 @@ class TestParser(TransactionCase):
     """Tests for the mrx parser itself."""
 
     def setUp(self):
-        super(TestParser, self).setUp()
+        super().setUp()
         self.parser = self.env["account.statement.import.mrx.parser"]
 
     def _do_parse_test(self, inputfile, goldenfile):
@@ -28,7 +26,7 @@ class TestParser(TransactionCase):
                 goldenfile_res = get_module_resource(
                     "account_statement_import_mrx", "test_files", goldenfile
                 )
-                with open(goldenfile_res, "r") as golden:
+                with open(goldenfile_res) as golden:
                     temp.seek(0)
                     diff = list(
                         difflib.unified_diff(
@@ -43,4 +41,3 @@ class TestParser(TransactionCase):
 
     def test_parse(self):
         self._do_parse_test("MRX-v1-5-Sample-CH.xml", "MRX-v1-5-Sample-CH.pydata")
-

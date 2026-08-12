@@ -14,11 +14,10 @@ class AccountBankStatementImport(models.TransientModel):
 
     def _parse_file(self, data_file):
         """Parse a MRX XML file."""
-        #try:
+        # try:
         parser = self.env["account.statement.import.mrx.parser"]
         _logger.warning("Try parsing with six parser.")
-        
-       
+
         try:
             a = 1
             return parser.parse(data_file)
@@ -37,5 +36,8 @@ class AccountBankStatementImport(models.TransientModel):
             except (zipfile.BadZipFile, ValueError):
                 pass
             # Not a mrx file, returning super will call next candidate:
-        _logger.warning("Statement file was not a merchantReconciliationXML (MRX) file.", exc_info=True)
+        _logger.warning(
+            "Statement file was not a merchantReconciliationXML (MRX) file.",
+            exc_info=True,
+        )
         return super()._parse_file(data_file)
