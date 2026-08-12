@@ -8,7 +8,7 @@ from odoo import _, models
 
 ENDING_BALANCE_REASON = {
     "10": "Negative balance of technical merchant account.",
-    "20": "Balance of technical merchant account is below minimum amount for settlement.",
+    "20": "Balance of technical merchant account is below minimum amount for settlement.",  # noqa: E501
     "30": "Merchant settlement has been blocked by acquirer.",
     "40": "Insufficient data for merchant settlement",
 }
@@ -53,7 +53,7 @@ class MRXParser(models.AbstractModel):
         If xpath_str is a list (or iterable), it will be seen as a series
         of search path's in order of preference. The first item that results
         in a found node will be used to set a value."""
-        if not isinstance(xpath_str, (list, tuple)):
+        if not isinstance(xpath_str, list | tuple):
             xpath_str = [xpath_str]
         for search_str in xpath_str:
             found_node = node.xpath(search_str)
@@ -68,8 +68,8 @@ class MRXParser(models.AbstractModel):
                 return
         obj[attr_name] = None
 
-    def trxFromfAdj(self, ns, node, moreInfos={}):
-        narration = moreInfos.copy()
+    def trxFromfAdj(self, ns, node, moreInfos=None):
+        narration = (moreInfos or {}).copy()
         for tag in [
             "stlEntryType",
             "stlEntrySubType",
@@ -155,7 +155,7 @@ class MRXParser(models.AbstractModel):
             trx["amount"] = 0.0
             trx["transaction_type"] = "NONPAYMENT"
 
-            result["name"] = "%s%s" % (trx["date"].strip("-"), "NONPAYMENT")
+            result["name"] = "{}{}".format(trx["date"].strip("-"), "NONPAYMENT")
 
         else:
             result["balance_end_real"] = 0.0  # this payment

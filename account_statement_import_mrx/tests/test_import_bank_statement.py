@@ -4,8 +4,8 @@ import difflib
 import pprint
 import tempfile
 
-from odoo.modules.module import get_module_resource
 from odoo.tests.common import TransactionCase
+from odoo.tools.misc import file_path
 
 
 class TestParser(TransactionCase):
@@ -16,15 +16,13 @@ class TestParser(TransactionCase):
         self.parser = self.env["account.statement.import.mrx.parser"]
 
     def _do_parse_test(self, inputfile, goldenfile):
-        testfile = get_module_resource(
-            "account_statement_import_mrx", "test_files", inputfile
-        )
+        testfile = file_path(f"account_statement_import_mrx/test_files/{inputfile}")
         with open(testfile, "rb") as data:
             res = self.parser.parse(data.read())
             with tempfile.NamedTemporaryFile(mode="w+", suffix=".pydata") as temp:
                 pprint.pprint(res, temp, width=160)
-                goldenfile_res = get_module_resource(
-                    "account_statement_import_mrx", "test_files", goldenfile
+                goldenfile_res = file_path(
+                    f"account_statement_import_mrx/test_files/{goldenfile}"
                 )
                 with open(goldenfile_res) as golden:
                     temp.seek(0)
@@ -36,7 +34,7 @@ class TestParser(TransactionCase):
                     if len(diff) > 2:
                         self.fail(
                             "actual output doesn't match expected "
-                            + "output:\n%s" % "".join(diff)
+                            + "output:\n{}".format("".join(diff))
                         )
 
     def test_parse(self):
