@@ -1,0 +1,41 @@
+# Copyright 2022 AGEPoly
+# License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html).
+import logging
+import zipfile
+from io import BytesIO
+
+from odoo import models
+
+_logger = logging.getLogger(__name__)
+
+
+class AccountBankStatementImport(models.TransientModel):
+    _inherit = "account.statement.import"
+
+    def _parse_file(self, data_file):
+        """Parse a MRX XML file."""
+        parser = self.env["account.statement.import.mrx.parser"]
+        _logger.debug("Try parsing with six parser.")
+
+        try:
+            return parser.parse(data_file)
+        except ValueError:
+            try:
+                with zipfile.ZipFile(BytesIO(data_file)) as data:
+                    currency = None
+                    account_number = None
+                    transactions = []
+                    for member in data.namelist():
+                        currency, account_number, new = self._parse_file(
+                            data.open(member).read()
+                        )
+                        transactions.extend(new)
+                return currency, account_number, transactions
+            except (zipfile.BadZipFile, ValueError):
+                _logger.debug("Statement file is not a zipped MRX file.")
+            # Not a mrx file, returning super will call next candidate:
+        _logger.warning(
+            "Statement file was not a merchantReconciliationXML (MRX) file.",
+            exc_info=True,
+        )
+        return super()._parse_file(data_file)
